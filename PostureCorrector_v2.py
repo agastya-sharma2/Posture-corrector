@@ -3,17 +3,20 @@ import mediapipe as mp
 import math
 import os
 import time
+import sys
+
 from playsound3 import playsound
 
 
-title = r"""
+# ==================== CONFIGURATION ====================
 
+TITLE = r"""
  _______  ___   _______    __   __  _______    ______    ___   _______  __   __  _______    __   __  _______ 
 |       ||   | |       |  |  | |  ||       |  |    _ |  |   | |       ||  | |  ||       |  |  | |  ||       |
 |  _____||   | |_     _|  |  | |  ||    _  |  |   | ||  |   | |    ___||  |_|  ||_     _|  |  |_|  ||____   |
 | |_____ |   |   |   |    |  |_|  ||   |_| |  |   |_||_ |   | |   | __ |       |  |   |    |       | ____|  |
-|_____  ||   |   |   |    |       ||    ___|  |    __  ||   | |   ||  ||       |  |   |    |       || ______|
- _____| ||   |   |   |    |       ||   |      |   |  | ||   | |   |_| ||   _   |  |   |     |     | | |_____ 
+|_____  ||   |   |   |    |       ||    ___|  |    __  ||   | |   ||  ||       |  |   |    |       ||____|  |
+ _____| ||   |   |   |    |       ||   |      |   |  | ||   | |   |_| ||   _   |  |   |     |     |  ____|  |
 |_______||___|   |___|    |_______||___|      |___|  |_||___| |_______||__| |__|  |___|      |___|  |_______|
 
 """
@@ -24,296 +27,419 @@ YELLOW = "\033[33m"
 BLUE = "\033[34m"
 CYAN = "\033[36m"
 RESET = "\033[0m"
-BOLD = "\033[1m"
 
-CAMERA_URL = "[REPLACE WITH YOUR PHONE'S IP ADDRESS]"
-THREASHOLD = 8
+CAMERA_URL = "http://10.0.0.245:4747/video"
 
-#Angle Function
-def angle(v1, v2):
-    dot = v1[0]*v2[0] + v1[1]*v2[1] #Dot formula is just multiplying x coords and multiplying y coords and adding them
-    mag1 = math.sqrt(v1[0]**2 + v1[1]**2) #Length of 1st vector
-    mag2 = math.sqrt(v2[0]**2 + v2[1]**2) #Length of 2nd vector (both use pythagoream theorem)
+THRESHOLD = 8
+
+IMAGE_CALIBRATION = "CalibratePosture.jpg"
+IMAGE_POSTURE = "GivenPosture.jpg"
+
+FONT_SCALE = 1.2
+FONT_WEIGHT = 2
+FONT_COLOR = (255, 255, 255)
+
+mp_pose = mp.solutions.pose
+
+
+# ==================== ANGLE CALCULATIONS ====================
+
+def calculate_angle(v1, v2):
+    """Calculate the angle between two 2D vectors."""
+
+    dot = v1[0] * v2[0] + v1[1] * v2[1]
+
+    mag1 = math.hypot(*v1)
+    mag2 = math.hypot(*v2)
 
     if mag1 == 0 or mag2 == 0:
         return 0.0
-    
+
     cos_angle = dot / (mag1 * mag2)
     cos_angle = max(-1.0, min(1.0, cos_angle))
-    
-    return math.degrees(math.acos(cos_angle)) #Formula for angle
 
-# ---------SETUP---------
-def BuildModel(path):
-    global fontScale
-    global fontWeight
-    global fontColor
-
-    global e_coords
-    global s_coords
-    global eb_coords
-    global w_coords
-    global er_coords
-    global n_coords
-
-    global image
-
-    #Loading Image and setup
-    path = path
-    image = cv2.imread(path)
-
-    #Loading and Creating pose model
-    mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose(static_image_mode=True)
-
-    # Convert to RGB
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = pose.process(rgb)
-
-    #Just Checking for Somebody in the Photo
-    if not results.pose_landmarks:
-        #print("No person detected")
-        raise TypeError("No Person Detected in the frame!")
-
-    h, w, _ = image.shape
-    lm = results.pose_landmarks.landmark #Landmarks
-
-    fontScale = 5
-    fontWeight = 10
-    fontColor = (255, 255, 255) #BGR
-
-    #Gathering Stats for Desired Landmarks
-    eye = lm[mp_pose.PoseLandmark.RIGHT_EYE]
-    shoulder = lm[mp_pose.PoseLandmark.RIGHT_SHOULDER]
-    elbow = lm[mp_pose.PoseLandmark.RIGHT_ELBOW]
-    wrist = lm[mp_pose.PoseLandmark.RIGHT_WRIST]
-    ear = lm[mp_pose.PoseLandmark.RIGHT_EAR]
-    nose = lm[mp_pose.PoseLandmark.NOSE]
-
-    #Coords of Landmarks
-    e_coords = (eye.x * w, eye.y * h)
-    s_coords = (shoulder.x * w, shoulder.y * h)
-    eb_coords = (elbow.x * w, elbow.y * h)
-    w_coords = (wrist.x * w, wrist.y * h)
-    er_coords = (ear.x * w, ear.y * h)
-    n_coords = (nose.x * w, nose.y * h)
-
-# ---------MATH---------
-def PerformMath():
-    NeckAngle = 0
-    ArmAngle = 0
-    HeadAngle = 0
-
-    #Neck
-    NeckVector = (e_coords[0] - s_coords[0], e_coords[1] - s_coords[1]) #Think of this as slope
-    VerticalVector = (0, -1) #A straight vertical line
-    NeckAngle = round(angle(NeckVector, VerticalVector), 1)
-    NeckAngle = min(NeckAngle, 180 - NeckAngle) #Just finding the smaller angle
-    print("\n Angle of neck: " + str(NeckAngle))
-
-    #Arm
-    ArmVector = (eb_coords[0] - w_coords[0], eb_coords[1] - w_coords[1]) #Think of this as slope
-    ShoulderVector = (s_coords[0] - eb_coords[0], s_coords[1], eb_coords[1])
-    ArmAngle = round(angle(ShoulderVector, ArmVector), 1)
-    ArmAngle = max(ArmAngle, 180 - ArmAngle) #Just finding the smaller angle
-    print("\n Angle of arm: " + str(ArmAngle))
-
-    #Head
-    HeadVector = (n_coords[0] - er_coords[0], n_coords[1] - er_coords[1]) #Think of this as slope
-    HorizontalVector = (-1, 0) #A straight horizontal line
-    HeadAngle = round(angle(HeadVector, HorizontalVector), 0)
-    HeadAngle = min(HeadAngle, 180 - HeadAngle) #Just finding the smaller angle
-    print("\n Angle of head: " + str(HeadAngle))
-
-    Plot(image, ArmAngle, NeckAngle, HeadAngle)
-
-    return ArmAngle, NeckAngle, HeadAngle
-
-# ---------PLOTTING---------
-def Plot(image, ArmAngle, NeckAngle, HeadAngle):
-    #Plotting Points
-    for pt in (e_coords, s_coords, eb_coords, w_coords, er_coords, n_coords):
-        cv2.circle(image, (int(pt[0]), int(pt[1])), 6, (0, 255, 0), -1)
-
-    #Neck
-    cv2.line(image,
-        (int(s_coords[0]), int(s_coords[1])), #Shoulder
-        (int(e_coords[0]), int(e_coords[1])), #Eye
-        (255, 0, 0), 3)
-
-    vertical_length = e_coords[1]  # pixel length for display
-    vertical_end = (int(s_coords[0]), int(s_coords[1] - vertical_length))
-
-    cv2.line(image,
-        (int(s_coords[0]), int(s_coords[1])), #Shoulder
-        vertical_end, #Vertical Line
-        (255, 0, 0), 3)
-
-    cv2.putText(image,
-        f"{NeckAngle:.1f} degrees",
-        (int(s_coords[0] + 60), int(s_coords[1] - 10)),
-        cv2.FONT_HERSHEY_SIMPLEX, fontScale, fontColor, fontWeight)
-
-    #Arms
-    cv2.line(image,
-        (int(w_coords[0]), int(w_coords[1])), #Wrist
-        (int(eb_coords[0]), int(eb_coords[1])), #Elbow
-        (0, 0, 255), 3)
-
-    cv2.line(image,
-        (int(s_coords[0]), int(s_coords[1])),
-        (int(eb_coords[0]), int(eb_coords[1])),
-        (0, 0, 255), 3)
+    return math.degrees(math.acos(cos_angle))
 
 
-    cv2.putText(image,
-        f"{ArmAngle:.1f} degrees",
-        (int(eb_coords[0] + 60), int(eb_coords[1] - 10)),
-        cv2.FONT_HERSHEY_SIMPLEX, fontScale, fontColor, fontWeight)
+# ==================== CAMERA ====================
 
-    #Head
-    cv2.line(image,
-        (int(n_coords[0]), int(n_coords[1])), #Wrist
-        (int(er_coords[0]), int(er_coords[1])), #Elbow
-        (0, 255, 255), 3)
+def capture_image(filename):
+    """Capture an image from the camera and save it."""
 
-    cv2.putText(image,
-        f"{HeadAngle:.1f} degrees",
-        (int(n_coords[0] + 60), int(n_coords[1] - 10)),
-        cv2.FONT_HERSHEY_SIMPLEX, fontScale, fontColor, fontWeight)
-    
-
-# ---------ANALYZATION---------
-def Analyze(ArmAngle, NeckAngle, HeadAngle):
-    print(f"\n---------{BLUE}Analyzation{RESET}---------")
-    #Score is defind by how many degrees off you are
-    NeckScore = 0
-    ArmScore = 0
-    HeadScore = 0
-
-    #Neck
-    NeckScore = abs(RNeckAngle-NeckAngle)
-    print("Neck:", str(round(NeckScore, 2)) + "° off")
-
-    #Arm
-    ArmScore = abs(RArmAngle-ArmAngle)
-    print("Arm:", str(round(ArmScore, 2)) + "° off")
-
-    #Head
-    HeadScore = abs(RHeadAngle-HeadAngle)
-    print("Head:", str(round(NeckScore, 2)) + "° off")
-
-    print("")
-
-    #Threashold
-    if NeckScore > THREASHOLD:
-        print("!! Neck angle is not ok!")
-        playsound("ClickError.wav")
-    if ArmScore > THREASHOLD:
-        print("!! Arm angle is not ok!")
-        playsound("ClickError.wav")
-    if HeadScore > THREASHOLD:
-        print("!! Head angle is not ok!")
-        playsound("ClickError.wav")
-    if NeckScore < THREASHOLD or ArmScore < THREASHOLD or HeadScore < THREASHOLD:
-        print("All good!")
-    
-# ---------CALIBRATION---------
-def Calibrate():
-    global RArmAngle, RNeckAngle, RHeadAngle
-
-    print(f"---------{BLUE}Calibration Mode{RESET}---------")
-    print("Please sit in desired position for the photo. Press Enter when ready")
-    input("")
-
-    userSatisfied = 0
-
-    while userSatisfied == 0:
-
-        print("Taking Picture...")
-        time.sleep(2)
-
-        cap = cv2.VideoCapture(CAMERA_URL)
-
-        if not cap.isOpened():
-            print("!! Could not connect to camera")
-            quit()
-        else:
-            time.sleep(1)
-
-            for _ in range(10):
-                cap.read()
-
-            ret, frame = cap.read()
-
-            if ret:
-                cv2.imwrite("CalibratePosture.jpg", frame)
-                BuildModel("CalibratePosture.jpg")
-                RArmAngle, RNeckAngle, RHeadAngle = PerformMath()
-        
-        cap.release()
-
-        print("Photo taken! Please check if you're satisfied with it!")
-        userSatisfied = int(input("1 --> Satisfied, 0 --> Not Satisfied  "))
-
-    print("Succesfully Calibrated!")
-
-
-# ---------POSTURE MODE---------
-def PostureMode():
-    print(f"\n---------{BLUE}Posture Mode{RESET}---------")
-    print("Please sit in the desired position")
-
-    time.sleep(60)
+    print("Taking picture...")
 
     cap = cv2.VideoCapture(CAMERA_URL)
 
     if not cap.isOpened():
-        print("!! Could not connect to camera")
-        quit()
-    else:
+        cap.release()
+        raise RuntimeError("Could not connect to camera!")
+
+    try:
         time.sleep(1)
 
+        # Allow camera frames to stabilize.
         for _ in range(10):
-            cap.read()
+            ret, frame = cap.read()
+
+            if not ret:
+                raise RuntimeError("Failed to read camera frame!")
 
         ret, frame = cap.read()
 
-        if ret:
-            cv2.imwrite("GivenPosture.jpg", frame)
-            BuildModel("GivenPosture.jpg")
-            Analyze(*PerformMath())
-    
-    cap.release()
+        if not ret:
+            raise RuntimeError("Failed to capture image!")
+
+        if not cv2.imwrite(filename, frame):
+            raise RuntimeError("Failed to save image!")
+
+    finally:
+        cap.release()
+
+    print("Picture saved!")
 
 
-# ---------START---------
-os.system("clear")
-print(CYAN,title,RESET)
-time.sleep(2)
-Calibrate()
+# ==================== POSE DETECTION ====================
 
-# ---------MAIN LOOP---------
-option = 0
-while 1:
-    print(f"\n---------{BLUE}Main Menu{RESET}---------")
-    print("What would you like to do?")
-    print("1 -> Check Posture")
-    print("2 -> Calibrate")
-    print("3 -> Quit")
-    option = int(input("-> "))
-    if option == 3:
-        print("Bye!")
-        quit()
-    elif option == 1:
-        while True:
-            try:
-                PostureMode()
-            except KeyboardInterrupt():
-                break
-    elif option == 2:
-        Calibrate()
+def build_model(path):
+    """Detect pose landmarks from an image."""
+
+    image = cv2.imread(path)
+
+    if image is None:
+        raise FileNotFoundError(f"Could not load image: {path}")
+
+    height, width, _ = image.shape
+
+    with mp_pose.Pose(
+        static_image_mode=True,
+        model_complexity=1
+    ) as pose:
+
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        results = pose.process(rgb)
+
+    if not results.pose_landmarks:
+        raise ValueError("No person detected in the frame!")
+
+    landmarks = results.pose_landmarks.landmark
+
+    # Store relevant landmarks.
+    landmark_names = {
+        "eye": mp_pose.PoseLandmark.RIGHT_EYE,
+        "shoulder": mp_pose.PoseLandmark.RIGHT_SHOULDER,
+        "elbow": mp_pose.PoseLandmark.RIGHT_ELBOW,
+        "wrist": mp_pose.PoseLandmark.RIGHT_WRIST,
+        "ear": mp_pose.PoseLandmark.RIGHT_EAR,
+        "nose": mp_pose.PoseLandmark.NOSE
+    }
+
+    coords = {}
+
+    for name, landmark_id in landmark_names.items():
+
+        landmark = landmarks[landmark_id]
+
+        coords[name] = (
+            landmark.x * width,
+            landmark.y * height
+        )
+
+    return image, coords
 
 
+# ==================== POSTURE MATH ====================
+
+def perform_math(image, coords):
+
+    # Neck
+    neck_vector = (
+        coords["eye"][0] - coords["shoulder"][0],
+        coords["eye"][1] - coords["shoulder"][1]
+    )
+
+    vertical_vector = (0, -1)
+
+    neck_angle = calculate_angle(neck_vector, vertical_vector)
+    neck_angle = min(neck_angle, 180 - neck_angle)
+
+    # Arm
+    arm_vector = (
+        coords["elbow"][0] - coords["wrist"][0],
+        coords["elbow"][1] - coords["wrist"][1]
+    )
+
+    shoulder_vector = (
+        coords["shoulder"][0] - coords["elbow"][0],
+        coords["shoulder"][1] - coords["elbow"][1]
+    )
+
+    arm_angle = calculate_angle(shoulder_vector, arm_vector)
+
+    # Preserve original larger-angle convention.
+    arm_angle = max(arm_angle, 180 - arm_angle)
+
+    # Head
+    head_vector = (
+        coords["nose"][0] - coords["ear"][0],
+        coords["nose"][1] - coords["ear"][1]
+    )
+
+    horizontal_vector = (-1, 0)
+
+    head_angle = calculate_angle(head_vector, horizontal_vector)
+    head_angle = min(head_angle, 180 - head_angle)
+
+    neck_angle = round(neck_angle, 1)
+    arm_angle = round(arm_angle, 1)
+    head_angle = round(head_angle, 1)
+
+    print(f"\nNeck angle: {neck_angle} degrees")
+    print(f"Arm angle: {arm_angle} degrees")
+    print(f"Head angle: {head_angle} degrees")
+
+    plot(image, coords, arm_angle, neck_angle, head_angle)
+
+    return arm_angle, neck_angle, head_angle
 
 
+# ==================== VISUALIZATION ====================
+
+def plot(image, coords, arm_angle, neck_angle, head_angle):
+
+    def point(name):
+        return tuple(map(int, coords[name]))
+
+    # Draw landmarks.
+    for coordinate in coords.values():
+        cv2.circle(
+            image,
+            tuple(map(int, coordinate)),
+            6,
+            (0, 255, 0),
+            -1
+        )
+
+    # Neck.
+    cv2.line(image, point("shoulder"), point("eye"), (255, 0, 0), 3)
+
+    cv2.line(
+        image,
+        point("shoulder"),
+        (
+            point("shoulder")[0],
+            point("shoulder")[1] - 100
+        ),
+        (255, 0, 0),
+        3
+    )
+
+    cv2.putText(
+        image,
+        f"{neck_angle:.1f} degrees",
+        (point("shoulder")[0] + 30, point("shoulder")[1] - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        FONT_SCALE,
+        FONT_COLOR,
+        FONT_WEIGHT
+    )
+
+    # Arm.
+    cv2.line(image, point("wrist"), point("elbow"), (0, 0, 255), 3)
+    cv2.line(image, point("shoulder"), point("elbow"), (0, 0, 255), 3)
+
+    cv2.putText(
+        image,
+        f"{arm_angle:.1f} degrees",
+        (point("elbow")[0] + 30, point("elbow")[1] - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        FONT_SCALE,
+        FONT_COLOR,
+        FONT_WEIGHT
+    )
+
+    # Head.
+    cv2.line(image, point("nose"), point("ear"), (0, 255, 255), 3)
+
+    cv2.putText(
+        image,
+        f"{head_angle:.1f} degrees",
+        (point("nose")[0] + 30, point("nose")[1] - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        FONT_SCALE,
+        FONT_COLOR,
+        FONT_WEIGHT
+    )
+
+    # Display image.
+    cv2.imshow("Posture Analysis", image)
+    cv2.waitKey(1)
+
+
+# ==================== ANALYSIS ====================
+
+def analyze(arm_angle, neck_angle, head_angle):
+
+    print(f"\n---------{BLUE}Analysis{RESET}---------")
+
+    scores = {
+        "Neck": abs(REFERENCE_NECK - neck_angle),
+        "Arm": abs(REFERENCE_ARM - arm_angle),
+        "Head": abs(REFERENCE_HEAD - head_angle)
+    }
+
+    errors_found = False
+
+    for body_part, score in scores.items():
+
+        print(f"{body_part}: {score:.2f} degrees off")
+
+        if score > THRESHOLD:
+            print(f"{RED}!! {body_part} angle is not okay!{RESET}")
+            errors_found = True
+
+    if errors_found:
+        try:
+            playsound("ClickError.wav")
+        except Exception as error:
+            print(f"Could not play sound: {error}")
+
+    else:
+        print(f"{GREEN}All good!{RESET}")
+
+
+# ==================== CALIBRATION ====================
+
+REFERENCE_ARM = None
+REFERENCE_NECK = None
+REFERENCE_HEAD = None
+
+
+def calibrate():
+
+    global REFERENCE_ARM
+    global REFERENCE_NECK
+    global REFERENCE_HEAD
+
+    print(f"\n---------{BLUE}Calibration Mode{RESET}---------")
+
+    input("Sit in your desired position and press Enter when ready.")
+
+    while True:
+
+        try:
+            capture_image(IMAGE_CALIBRATION)
+
+            image, coords = build_model(IMAGE_CALIBRATION)
+
+            arm, neck, head = perform_math(image, coords)
+
+        except (RuntimeError, ValueError, FileNotFoundError) as error:
+            print(f"{RED}Error: {error}{RESET}")
+            continue
+
+        print("\nPlease check your calibration image.")
+
+        choice = input("1 --> Satisfied, 0 --> Retry: ").strip()
+
+        if choice == "1":
+
+            REFERENCE_ARM = arm
+            REFERENCE_NECK = neck
+            REFERENCE_HEAD = head
+
+            print(f"\n{GREEN}Successfully calibrated!{RESET}")
+            return
+
+        elif choice == "0":
+            print("Retrying calibration...")
+
+        else:
+            print("Invalid choice. Enter 0 or 1.")
+
+
+# ==================== POSTURE MODE ====================
+
+def posture_mode():
+
+    print(f"\n---------{BLUE}Posture Mode{RESET}---------")
+    print("Please sit in your desired position.")
+
+    time.sleep(10)
+
+    try:
+        capture_image(IMAGE_POSTURE)
+
+        image, coords = build_model(IMAGE_POSTURE)
+
+        angles = perform_math(image, coords)
+
+        analyze(*angles)
+
+    except (RuntimeError, ValueError, FileNotFoundError) as error:
+        print(f"{RED}Error: {error}{RESET}")
+
+    except Exception as error:
+        print(f"{RED}Unexpected error: {error}{RESET}")
+
+
+# ==================== MAIN MENU ====================
+
+def main():
+
+    os.system("cls" if os.name == "nt" else "clear")
+
+    print(f"{CYAN}{TITLE}{RESET}")
+
+    time.sleep(2)
+
+    calibrate()
+
+    while True:
+
+        print(f"\n---------{BLUE}Main Menu{RESET}---------")
+        print("1 -> Check Posture")
+        print("2 -> Calibrate")
+        print("3 -> Quit")
+
+        option = input("-> ").strip()
+
+        if option == "1":
+
+            while True:
+
+                try:
+                    posture_mode()
+
+                    again = input(
+                        "\nPress Enter to check again or type 'q' to return: "
+                    ).strip().lower()
+
+                    if again == "q":
+                        break
+
+                except KeyboardInterrupt:
+                    print("\nReturning to menu...")
+                    break
+
+        elif option == "2":
+            calibrate()
+
+        elif option == "3":
+            print("Bye!")
+
+            cv2.destroyAllWindows()
+            sys.exit(0)
+
+        else:
+            print("Invalid option. Please enter 1, 2, or 3.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+
+    except KeyboardInterrupt:
+        print("\nProgram interrupted.")
+
+    finally:
+        cv2.destroyAllWindows()
