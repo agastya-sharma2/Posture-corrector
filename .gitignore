@@ -1,2 +1,39 @@
+
+# Python virtual environments
 .venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# macOS
 .DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Test and coverage files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.log
+*.tmp
+
+# Local data
+v3/data/*.csv
+v3/data/*.json
+
+# Local training artifacts
+v3/ml/models/*.pkl
+
+# Generated debug images
+v3/capture.jpg
+
+# Python cache
+__pycache__/
+*.py[cod]
