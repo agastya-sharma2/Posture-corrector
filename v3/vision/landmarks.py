@@ -116,6 +116,30 @@ class PoseLandmarks:
             confidence=float(confidence)
         )
 
+    def get_confidence(self, name):
+        """
+        Return the original confidence score for a landmark.
+
+        Unlike get(), this method does not apply the confidence
+        threshold or validate landmark coordinates.
+
+        Returns None if the confidence value itself is invalid.
+        """
+
+        if name not in self.KEYPOINT_INDICES:
+            raise ValueError(f"Unknown landmark: {name}")
+
+        index = self.KEYPOINT_INDICES[name]
+        confidence = self.keypoints[index, 2]
+
+        if not np.isfinite(confidence):
+            return None
+
+        if not 0 <= confidence <= 1:
+            return None
+
+        return float(confidence)
+
     def is_valid(self, name):
         """Check whether a named landmark is usable."""
 

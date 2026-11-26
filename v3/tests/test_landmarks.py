@@ -16,6 +16,12 @@ def create_keypoints():
 
     return points
 
+def create_valid_keypoints():
+    keypoints = np.zeros((17, 3), dtype=np.float32)
+    keypoints[:, 0] = 100
+    keypoints[:, 1] = 100
+    keypoints[:, 2] = 0.9
+    return keypoints
 
 def test_valid_landmark():
     points = create_keypoints()
@@ -81,3 +87,40 @@ def test_nan_coordinate():
     pose = PoseLandmarks(points, 640, 480)
 
     assert not pose.is_valid("right_eye")
+
+
+def test_get_confidence_returns_original_score():
+    keypoints = create_valid_keypoints()
+    keypoints[10, 2] = 0.85
+
+    pose = PoseLandmarks(keypoints, 640, 480)
+
+    assert pose.get_confidence("right_wrist") == pytest.approx(0.85)
+
+
+def test_get_confidence_returns_low_confidence_score():
+    keypoints = create_valid_keypoints()
+    keypoints[10, 2] = 0.18
+
+    pose = PoseLandmarks(keypoints, 640, 480)
+
+    assert pose.get("right_wrist") is None
+    assert pose.get_confidence("right_wrist") == pytest.approx(0.18)
+
+
+def test_get_confidence_rejects_invalid_confidence():
+    keypoints = create_valid_keypoints()
+    keypoints[10, 2] = np.nan
+
+    pose = PoseLandmarks(keypoints, 640, 480)
+
+    assert pose.get_confidence("right_wrist") is None
+
+
+def test_get_confidence_rejects_unknown_landmark():
+    keypoints = create_valid_keypoints()
+
+    pose = PoseLandmarks(keypoints, 640, 480)
+
+    with pytest.raises(ValueError, match="Unknown landmark"):
+        pose.get_confidence("unknown")
