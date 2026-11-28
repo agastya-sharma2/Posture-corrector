@@ -37,3 +37,13 @@ v3/capture.jpg
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Personal calibration profiles
+data/profiles/
+
+# Collected datasets
+data/datasets/*.csv
+
+# Temporary hardware tests
+data/test/
+test_collection.py
